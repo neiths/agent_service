@@ -1,0 +1,53 @@
+stages:
+    - deploy
+    - migrate
+
+deploy-dev:
+    stage: deploy
+    variables:
+        GIT_STRATEGY: fetch
+    script:
+        - cat $ENV_FILE > .env
+        - rsync -ahrz --delete-after -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" $CI_PROJECT_DIR/ $CI_DEV_USER@$CI_DEV_IP:$CI_DEV_PATH
+        - ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $CI_DEV_USER@$CI_DEV_IP "cd $SOURCE_PATH && bash deploy-agent.sh"
+
+    tags:
+        - agent-service
+    only:
+        - develop
+
+migrate-dev:
+  stage: migrate
+  script:
+    - echo "Running migrations..."
+    - ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $CI_DEV_USER@$CI_DEV_IP "cd $CI_DEV_PATH && python3 manage.py migrate"
+  tags:
+    - agent-service
+  only:
+    - develop
+  when: manual
+
+deploy-prod:
+    stage: deploy
+    variables:
+        GIT_STRATEGY: fetch
+    script:
+        - cat $PRD_ENV_FILE > .env
+        - rsync -ahrz --delete-after -e "ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null" $CI_PROJECT_DIR/ $CI_PRD_USER@$CI_PRD_IP:$CI_PRD_PATH
+        - ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $CI_PRD_USER@$CI_PRD_IP "cd $SOURCE_PATH && bash agent.sh"
+
+    tags:
+        - prod
+    only:
+        - main
+
+migrate-prod:
+  stage: migrate
+  script:
+    - echo "Running migrations..."
+    - ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $CI_PRD_USER@$CI_PRD_IP "cd $CI_PRD_PATH && python3 manage.py migrate"
+  tags:
+    - prod
+  only:
+    - main
+  when: manual

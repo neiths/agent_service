@@ -1,39 +1,33 @@
 import grpc
 from concurrent import futures
-
+from config import Config 
 # Import generated gRPC modules
-# from pb.Agent_pb2_grpc import add_AgentServicer_to_server
-# from pb.AgentTool_pb2_grpc import add_AgentToolServicer_to_server
-from pb.Conversation_pb2_grpc import add_ConversationControllerServicer_to_server
-# from pb.ExternalKownledge_pb2_grpc import add_ExternalKnowledgeServicer_to_server
-# from pb.InternalKownledge_pb2_grpc import add_InternalKnowledgeServicer_to_server
-from core_app.grpc.pb.LlmModel_pb2_grpc import add_LlmModelControllerServicer_to_server
-from core_app.grpc.pb.SystemPrompt_pb2_grpc import add_SystemPromptControllerServicer_to_server
-from core_app.grpc.pb.User_pb2_grpc import add_UserControllerServicer_to_server
-# from pb.UUID_pb2_grpc import add_UUIDServicer_to_server
+from core_app.grpc.pb.face_recognition_pb2_grpc import add_FaceRecognitionServiceServicer_to_server
+from core_app.grpc.pb.ocr_service_pb2_grpc import add_OCRServiceServicer_to_server
+from core_app.grpc.pb.stt_service_pb2_grpc import add_STTServiceServicer_to_server
+
 
 # Import your service implementations
 from .grpc_handlers import (
-    SystemPromptControllerServicer,
-    UserControllerServicer,
-    LlmModelControllerServicer,
-    ConversationControllerServicer
+    OCRServiceServicer,
+    STTServiceServicer,
+    FaceRecognitionService
 )
 
-def serve():
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+def serve(port=50051):
+    
+    # config message size
+    config = Config()
+    channel_opt = [('grpc.max_send_message_length', config.MAX_SEND_MESSAGE_LENGTH), ('grpc.max_receive_message_length', config.MAX_RECEIVE_MESSAGE_LENGTH)]
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=10), options=channel_opt)
     
     # Register services
-    # add_AgentServicer_to_server(AgentServicerImplementation(), server)
-    # add_AgentToolServicer_to_server(AgentToolServicerImplementation(), server)
-    add_ConversationControllerServicer_to_server(ConversationControllerServicer(), server)
-    # add_ExternalKnowledgeServicer_to_server(ExternalKnowledgeServicerImplementation(), server)
-    # add_InternalKnowledgeServicer_to_server(InternalKnowledgeServicerImplementation(), server)
-    add_LlmModelControllerServicer_to_server(LlmModelControllerServicer(), server)
-    add_SystemPromptControllerServicer_to_server(SystemPromptControllerServicer(), server)
-    add_UserControllerServicer_to_server(UserControllerServicer(), server)
+    add_OCRServiceServicer_to_server(OCRServiceServicer(), server)
+    add_STTServiceServicer_to_server(STTServiceServicer(), server)
+    add_FaceRecognitionServiceServicer_to_server(FaceRecognitionService(), server)
     
     # Start the server
-    server.add_insecure_port('[::]:50051')
+    server.add_insecure_port(f'0.0.0.0:{port}')
+    print(f'gRPC server started on port {port}')
     server.start()
     server.wait_for_termination()

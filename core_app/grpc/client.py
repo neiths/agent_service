@@ -1,216 +1,106 @@
 import grpc
-import uuid
-from pb import SystemPrompt_pb2
-from pb import SystemPrompt_pb2_grpc
-from pb import User_pb2
-from pb import User_pb2_grpc
-from pb import LlmModel_pb2
-from pb import LlmModel_pb2_grpc
-from pb import UUID_pb2
-from google.protobuf.timestamp_pb2 import Timestamp
+import os
+from pb import ocr_service_pb2, ocr_service_pb2_grpc, stt_service_pb2_grpc, stt_service_pb2, face_recognition_pb2, face_recognition_pb2_grpc
 
+def read_file_as_bytes(file_path):
+    with open(file_path, 'rb') as f:
+        file_content = f.read()  # Read the file as bytes
+    return file_content
+            
+def get_file(stub):
 
-
-
-def create_system_prompt(stub):
-    # Generate a new UUID for the SystemPrompt
-    new_prompt_id = str(uuid.uuid4())
-    system_prompt = SystemPrompt_pb2.SystemPrompt()
-    system_prompt.id.value = new_prompt_id
-    system_prompt.prompt_name = "thien122"
-    system_prompt.prompt_content = "Thien.2221"
-    # system_prompt.created_at = current_time.seconds
-    # system_prompt.updated_at = current_time.seconds
-
-    # Create the CreateSystemPromptRequest message
-    create_response = SystemPrompt_pb2.CreateSystemPromptRequest(
-        systemprompt=system_prompt
+    file = read_file_as_bytes("core_app/grpc/data/image copy 8.png")
+    name = '2.png'
+    
+    request = ocr_service_pb2.FileRequest(
+        file_name = name,
+        file = file,
     )
-
-    # Call the gRPC method
-    response = stub.CreateSystemPrompt(create_response)
-    
-    print(f"Created SystemPrompt ID: {response.id.value}")
-    
-def get_systemprompt_prompt_by_id(stub):
-    sp = SystemPrompt_pb2.GetSystemPromptRequest()
-    print(sp)
-    id ="bcb23e1d-cf2b-47d1-812a-6262969b4c60"
-    sp.id.value = id
-    system_prompt = stub.GetSystemPrompt(sp)
-    
-    
-    a = system_prompt
-    
+    a = stub.CreateTextFromFile(request)
     print(a)
     
     
-def get_list_sp(stub):
-    a = stub.ListSystemPrompts(SystemPrompt_pb2.ListSystemPromptsRequest())
-    
-    print(a)
-    
-def update_sp(stub):
-    system_prompt = SystemPrompt_pb2.SystemPrompt(
-            id=UUID_pb2.UUID(value="bcb23e1d-cf2b-47d1-812a-6262969b4c60"),
-            prompt_name="Updated Prompt",
-            prompt_content="This is the updated content."
-        )
-
-    request = SystemPrompt_pb2.UpdateSystemPromptRequest(systemprompt=system_prompt)
-    stub.UpdateSystemPrompt(request)
-    print('ssuc')
-
-def delete_sp(stub):
-    id = UUID_pb2.UUID(value = "12ec7c30-a4c0-417a-bc47-1ed98d13e69e")
-    a = SystemPrompt_pb2.DeleteSystemPromptRequest(id=id)
-    stub.DeleteSystemPrompt(a)
-    print('deleted')
-    
-    
-def create_user(stub):
+def upload_file(stub, file_path):
+    def file_chunks():
+        with open(file_path, 'rb') as f:
+            while True:
+                chunk = f.read(1024*32)  # Read in 1KB chunks
+                if not chunk:
+                    break
+                print(f"Sending chunk of size: {len(chunk)}")
+                #return iter([].append(ai_service_pb2.AudioChunk(chunk_data=chunk)))
+                yield stt_service_pb2.AudioChunkRequest(chunk_data=chunk)
+                
     try:
-        # Generate a new UUID for the user
-
-        # Create a new User message
-        user1 = User_pb2.User()
-        user1.username="username"
-        user1.password="password"
-        user1.email="em@gg.com"
-        
-
-        # Create the CreateUserRequest message
-        create_request = User_pb2.CreateUserRequest(
-            user=user1
-        )
-
-        print(create_request)
-        # Call the gRPC method
-        response = stub.CreateUser(create_request)
-
-        # Print the created user's UUID from the response
-        print(f"Created user ID: {response.id.value}")
+        response_iterator = stub.StreamAudio(file_chunks())
+        for response in response_iterator:
+            print(f"Received transcription: {response.transcription}")
     except grpc.RpcError as e:
-        # Capture gRPC errors and log
-        print(f"gRPC Error: {e.code()} - {e.details()}")
-    except Exception as e:
-        # Capture any other exceptions and log
-        print(f"Error: {str(e)}")
+        print(f"gRPC error: {e.code()} - {e.details()}")
         
-def get_user(stub, id):
-    u = User_pb2.GetUserRequest()
-    u.id.value = id
-    system_prompt = stub.GetUser(u)
-    
-    a = system_prompt
-    
-    return a
-    
-    
-def get_list_user(stub):
-    
-    a = stub.ListUsers(User_pb2.ListUsersRequest())
-    
-    print(a)
-    
-def update_user(stub):
-    u = User_pb2.User(
-            id=UUID_pb2.UUID(value="2"),
-            username='thien',
-            email='thien@gmail.com'
-        )
 
-    request = User_pb2.UpdateUserRequest(user=u)
-    stub.UpdateUser(request)
-    print('ssuc')
+def run_audio(stub, audio_file_path):    
+    def read_audio_file(file_path):
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Audio file {file_path} not found.")
+        with open(file_path, 'rb') as f:
+            return f.read()
+    try:
+        audio_data = read_audio_file(audio_file_path)
+        print("Sending UploadAudio request...")
+        response = stub.UploadAudio(stt_service_pb2.AudioFileRequest(file_data=audio_data))
+        print("Upload Audio Response:", response.transcription)
+        return response
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+    except grpc.RpcError as e:
+        print(f"Upload Audio RPC error: {e.code()} - {e.details()}")
     
-def delete_user(stub):
-    id = UUID_pb2.UUID(value = "2")
-    a = User_pb2.DeleteUserRequest(id=id)
-    stub.DeleteUser(a)
-    print('deleted')
+def add_Face(stub, file_image):
     
+    image = read_file_as_bytes(file_image)
     
-def create_llm(stub, stube_user):
-    llm = LlmModel_pb2.LlmModel()
-    id = str(uuid.uuid4())
-    # llm.id.value = id
-    llm.llm_name="bap1"
-    llm.provider="openai"
-    llm.model_version="gpt-4o-mini"
-    llm.api_key = "dakjdkasldjwadlakj"
+    request = face_recognition_pb2.UploadImageRequest(
+        file_data=image,
+        Country="Vietnam",
+        FullName="quang linh vlog",
+        Birthday="1992-01-01",
+        Gender="Male",
+        Age="34",
+        Email="nguyenvana@example.com",
+        Phone_number="0123456789",
+        subsystem="DemoHUB"
+    )    
     
+    # Gửi request và nhận response
+    response = stub.UploadImage(request)
+    
+    # In ra thông báo từ server
+    print(f"Response: {response.message}, Status Code: {response.status_code}")
 
-    llm.user_id.value = "1" 
-    print(llm)
+def recognize_face(stub, file_image):
     
-    create_request = LlmModel_pb2.CreateLlmModelRequest(
-        llmmodel=llm
-    )
-    print(create_request)
-    response = stub.CreateLlmModel(create_request)
-    print(response)
+    image = read_file_as_bytes(file_image)
     
-def get_llm(stub):
-    u = LlmModel_pb2.GetLlmModelRequest()
-    u.id.value = str("50b444b9-20f1-460d-b87b-bebf804fa298")
-    system_prompt = stub.GetLlmModel(u)
+    response = stub.UploadImageRecognition(face_recognition_pb2.ImageRecognition(file_data=image))
     
-    a = system_prompt
-    
-    print(a)
-
-def get_list_llm(stub):
-    
-    a = stub.ListLlmModels(LlmModel_pb2.ListLlmModelsRequest())
-    
-    print(a)
-    
-def update_llm(stub):
-    u = LlmModel_pb2.LlmModel(
-            id=UUID_pb2.UUID(value="50b444b9-20f1-460d-b87b-bebf804fa298"),
-            llm_name="bapmodified",
-            provider="openai",
-            model_version="gpt-4o-mini",
-            api_key = "dakjdkasldjwadlakj",
-            user_id = UUID_pb2.UUID(value="1")
-        )
-
-    request = LlmModel_pb2.UpdateLlmModelRequest(llmmodel=u)
-    stub.UpdateLlmModel(request)
-    print('ssuc')
-    
-def delete_llm(stub):
-    id = UUID_pb2.UUID(value = "50b444b9-20f1-460d-b87b-bebf804fa298")
-    a = LlmModel_pb2.DeleteLlmModelRequest(id=id)
-    stub.DeleteLlmModel(a)
-    print('deleted')
+    print(f"Response: {response.message}, Status Code: {response.status_code}")
 
 def run():
-    with grpc.insecure_channel('localhost:50051') as channel:
-        #stub = SystemPrompt_pb2_grpc.SystemPromptControllerStub(channel)
-        stub_user = User_pb2_grpc.UserControllerStub(channel)
-        stub = LlmModel_pb2_grpc.LlmModelControllerStub(channel)
-        
-        
-        
-        #create_system_prompt(stub)
-        #get_systemprompt_prompt_by_id(stub)
-        #get_list_sp(stub)
-        #update_sp(stub)
-        #delete_sp(stub)
-        #create_user(stub)
-        #get_user(stub)      
-        #get_list_user(stub)  
-        #update_user(stub)
-        #delete_user(stub)
-        #create_llm(stub, stub_user)
-        #get_llm(stub)
-        #get_list_llm(stub)
-        #update_llm(stub)
-        delete_llm(stub)
+    audio_file_path = "core_app/grpc/data/Why does JavaScript's fetch make me wait TWICE_.mp3"
+    image_file_path = "core_app/grpc/data/hieupc.jpeg"
     
-
+    with grpc.insecure_channel('localhost:50051') as channel:
+        stub_ocr = ocr_service_pb2_grpc.OCRServiceStub(channel)
+        stub_stt = stt_service_pb2_grpc.STTServiceStub(channel)
+        stub_face = face_recognition_pb2_grpc.FaceRecognitionServiceStub(channel)
+        
+        get_file(stub_ocr)
+        #upload_file(stub_stt, audio_file_path)
+        #run_audio(stub_stt, audio_file_path)
+        
+        # add_Face(stub_face, image_file_path)
+        #recognize_face(stub_face, image_file_path)
 
 if __name__ == '__main__':
     run()

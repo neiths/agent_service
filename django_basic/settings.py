@@ -39,12 +39,61 @@ DEBUG = True
 
 
 ALLOWED_HOSTS = ["*"]
-CORS_ORIGIN_ALLOW_ALL = True
+
+CORS_ORIGIN_ALLOW_ALL = False
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = ['https://*.agent.bap.jp', "https://*.bap-software.net", "https://*.bap.jp"]
+CSRF_TRUSTED_ORIGINS = ['https://*.agent.bap.jp', 
+                        "https://*.bap-software.net", 
+                        "https://*.bap.jp", 
+                        'https://*.bappartners.com',
+                        ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTOCOL', 'https')
+
+CORS_ALLOWED_ORIGINS = [
+    'https://*.bappartners.com',
+    'https://localhost:8000',
+    'https://*.bap.jp'
+]
+
+CORS_ALLOW_METHODS = (
+    "DELETE",
+    "GET",
+    "OPTIONS",
+    "PATCH",
+    "POST",
+    "PUT",
+)
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
+
+
+SWAGGER_SETTINGS = {
+    'USE_SESSION_AUTH': True,
+    'SECURITY_DEFINITIONS': {
+        'basic': {
+            'type': 'basic'
+        }
+    },
+    # 'LOGIN_URL': 'rest_framework:login',  # Configuring login URL for Swagger
+    # 'LOGOUT_URL': 'rest_framework:logout',  # Configuring logout URL for Swagger
+}
+
+REDOC_SETTINGS = {
+    'LAZY_RENDERING': False,
+}
 
 
 # Application definition
@@ -62,6 +111,7 @@ INSTALLED_APPS = [
     "drf_yasg", # Yet another swagger generator
     "corsheaders",
     "rest_framework.authtoken",
+    "django_celery_beat", 
 ]
 
 ASGI_APPLICATION = "django_basic.asgi.application"
@@ -97,10 +147,6 @@ SIMPLE_JWT = {
     'SLIDING_TOKEN_LIFETIME_LATE_USER': timedelta(days=30),
 }
 
-# CORS_ALLOWED_ORIGINS = [
-#     "http://localhost:3000",
-#     "http://127.0.0.1:3000",  # URL của frontend React
-# ]
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
@@ -173,11 +219,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "Etc/GMT-7"
-
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
@@ -194,3 +238,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 SWAGGER_SETTINGS = {
    'USE_SESSION_AUTH': True
 }
+
+
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL')  # or RabbitMQ URL if you're using RabbitMQ
+CELERY_BEAT_SCHEDULE = {
+    'delete-old-facedata-every-24-hours': {
+        'task': 'core_app.tasks.delete_old_facedata',
+        'schedule': 60.0,  # 24 hours in seconds
+    },
+}
+

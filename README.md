@@ -1,4 +1,10 @@
-## Getting Started
+# Table of Contents
+- [1. Getting Started](#getting-started)
+- [2. API Endpoints](#api-endpoints)
+- [3. gRPC](#grpc)
+
+
+## 1. Getting Started
 
 To get started with this project, you need to configure your environment variables. Follow the steps below to set up your environment:
 
@@ -17,7 +23,7 @@ Next, create and activate a Python virtual environment to isolate your project d
 
 ```python
 # create a python environment
-python -m venv venv
+python3 -m venv venv
 
 # activate
 venv/Scripts/activate (windows)
@@ -26,21 +32,43 @@ source venv/Scripts/activate (linux)
 
 ### 3. Install Project Dependencies
 
+Make sure install PortAudio. Unless You will encounter the error from pip install requirement below
+
+```bash
+sudo apt install portaudio19-dev 
+```
+
+Make sure install cmake for face recognition.
+```bash
+sudo apt install cmake
+```
+
+Make sure install tessaract-ocr for OCR
+```bash
+sudo apt-get install tesseract-ocr -y
+sudo apt-get install tesseract-ocr-all -y
+```
+
 With the virtual environment activated, install the necessary dependencies using pip:
 
 ```python
 # Install dependencies
-pip install -r requirements.txt
+pip install -r stable-requirements.txt # this is a freeze requirements which work smoothly dev environment
+```
+
+If Makefile is available. (Linux only)
+
+```bash
+Make setup # to install all the dependencies above
 ```
 
 ### 4. Configure the Database
 
-Run the following commands to create and apply the database migrations:
+Run the following commands to apply the database migrations:
 
 ```python
-# Run database migrations
-python manage.py makemigrations
-python manage.py migrate
+# Apply database migrations
+python3 manage.py migrate
 ```
 
 ```bash
@@ -62,11 +90,43 @@ Finally, start the development server to run your application:
 python manage.py runserver
 ```
 
+
 ### 6. Create super user
 
 ```python
 python manage.py createsuperuser
 ```
+
+### 7. Celery setup
+A current task is deleting image that expires after 24 hours.
+
+If you do not have Redis installed, you can install it using the following command:
+```bash
+sudo apt-get install redis-server
+```
+
+To verify that Redis is running properly, you can use the Redis CLI:
+```bash
+redis-cli ping # You should receive a response of "PONG".
+```
+Update Environment Variables (.env)
+```bash
+# Celery broker URL
+CELERY_BROKER_URL='redis://localhost:6379/0'
+```
+
+In separate terminal windows, start the Celery worker and the Celery Beat scheduler:
+```bash
+celery -A django_basic worker --loglevel=info
+#detach mode
+celery -A django_basic worker -l info -f /tmp/celery_worker.log --detach
+```
+```bash
+celery -A django_basic beat --loglevel=info
+#detach mode
+celery -A django_basic beat -l info -f /tmp/celery_beat.log --detach
+```
+
 
 ## API Endpoints
 
@@ -136,8 +196,7 @@ Here are the API endpoints available in this project:
     "llm": "",
     "tools": [
        ""
-    ],
-    "prompt": "" \\id
+    ]
   }
   ```
 
@@ -151,8 +210,8 @@ Here are the API endpoints available in this project:
     - Send a POST request with the following JSON structure:
     ```json
     {
-      "agent": "", \\id
-      "chat_history": [] \\[{"", ""}]
+      "agent": "", // id
+      "chat_history": []  // [{"", ""}]
     }
     ```
 
@@ -181,6 +240,104 @@ Here are the API endpoints available in this project:
       "message": ""
     }
     ```
+
+## gRPC
+
+### Project Structure
+
+**Proto Files**: `core_app/grpc/proto`
+- `ocr_service.proto`
+- `stt_service.proto`
+
+**Client File**: `core_app/grpc/client.py`
+- A Python client for testing requests to the gRPC server.
+
+**Loggings**: `document_processing.log`
+- Check the logs of server.
+
+### How to Run the gRPC Server
+
+To run the gRPC services, execute the following command:
+
+```bash
+python3 manage.py run_grpc_server <port> # default: 50051, python3 manage.py run_grpc_server 6443
+```
+
+### OCRService gRPC API
+
+**Service**: `OCRSservice`
+
+**Method**: `CreateTextFromFile(FileRequest) returns (FileResponse)`
+
+This method processes an OCR request by accepting a file and returning the processed text.
+
+#### Request: `FileRequest`
+- **file_name**: Name of the file being sent (string).
+- **file**: File data (in `bytes` format).
+
+#### Response: `FileResponse`
+- **message**: Text response notifies error or success message.
+- **text**: Text response related to the processed file.
+
+---
+
+### Speech-to-Text Service gRPC API
+
+**Service**: `STTService`
+
+#### Methods:  
+1. **`UploadAudio (AudioFileRequest) returns (TranscriptionResponse)`**  
+   This method transcribes a complete audio file into text.
+
+   ##### Request: `AudioFileRequest`
+   - **file_data**: Full audio file in binary (`bytes`) format.
+
+   ##### Response: `TranscriptionResponse`
+   - **transcription**: Text transcription of the uploaded audio.
+
+2. **`StreamAudio (stream AudioChunkRequest) returns (stream TranscriptionStreamingResponse)`**  
+   This method streams audio chunks in real time and provides live transcription.
+
+   ##### Request: `AudioChunkRequest`
+   - **chunk_data**: A chunk of audio in binary (`bytes`) format.
+
+   ##### Response: `TranscriptionStreamingResponse`
+   - **transcription**: Text transcription of the streamed audio chunk.
+
+---
+
+## Configuration Guide
+
+### 1. Add Trusted Origins for CSRF Protection
+To allow your Django application to accept requests from specific domains, update the `settings.py` file:
+
+```python
+# settings.py
+CSRF_TRUSTED_ORIGINS = ['https://your-domain.com']  # Add your trusted domain(s) here
+```
+
+### 2. Running Django on a Custom Port
+By default, Django runs on port 8000. To run the Django development server on a different port, use the following command:
+```bash
+python manage.py runserver <port>
+```
+
+For example, to run the server on port 7000:
+```bash
+python manage.py runserver 7000
+```
+### 3.Adjusting the gRPC Server Port
+To change the gRPC server's port, modify the add_insecure_port method in core_app/grpc/grpc_server.py:
+
+```python
+# core_app/grpc/grpc_server.py
+server.add_insecure_port('0.0.0.0:<port>')  # Replace <port> with your desired port number
+```
+For example, to change the gRPC server to port 60051:
+
+```python
+server.add_insecure_port('0.0.0.0:60051')
+```
 
 ### Flow
 
@@ -346,5 +503,5 @@ Ví dụ chi tiết:
    - Sử dụng lệnh `query_from_wikipedia("Chiến tranh thế giới thứ hai")` để truy vấn thông tin trên Wikipedia.
 
 3. Trả lời người dùng:
-   - Cung cấp thông tin liên quan đến chủ đề Chiến tranh thế giới thứ hai: `Here is the information related to Chiến tranh thế giới thứ hai: [Extracted Information]`
+   - Cung cấp thông tin liên quan đến chủ đề Chiến tranh thế giới thứ hai: `Here is the information related to Chiến tranh thế giới thứ hai: [Extracted Information]` - huynn2
 ```
